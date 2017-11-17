@@ -41,7 +41,7 @@ def token_extract(text,ngram=[]):
                 words.append(''.join(word_list[i:i+n]))
         words.append(word)
     i += 1
-    if i%batch_size ==0:print(words)
+    if i%batch_size ==0:print(words[:10])
     return words
 
 def train_gen( batch_size=32,maxlen=200,drop=0 ):
@@ -131,7 +131,7 @@ def cnn_model():
         # add bn
         feature_vector = BatchNormalization()(feature_vector) ## scale to unit vector
         feature_vector = Activation('relu')(feature_vector)
-        feature_vector = Dropout(0.2)(feature_vector)
+        # feature_vector = Dropout(0.2)(feature_vector)
         if n_gram != 1:
             i += 1
             feature_vector = Conv1D(
@@ -201,11 +201,10 @@ if __name__ == '__main__':
     # Set parameters: 设定参数
     max_features = len(dictionary.token2id)  # 词汇表大小
     maxlen = 10000  # 序列最大长度
-    batch_size = 5  # 批数据量大小
+    batch_size = 64  # 批数据量大小
     embedding_dims = 300  # 词向量维度
-    nb_epoch = 10  # 迭代轮次
+    nb_epoch = 20  # 迭代轮次
     nb_filter = 200  # 1维卷积核个数
-    filter_length = 2  # 卷积核长度
     hidden_dims = 128  # 隐藏层维度
     ys = pd.read_pickle('../cache/penalty_list.pkl')
     class_weight = defaultdict(int)
