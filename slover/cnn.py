@@ -1,7 +1,4 @@
 from __future__ import print_function
-
-from data_processing.dataprocessing import _build_vocabulary
-
 '''
 python 3.5
 keras 2
@@ -158,7 +155,7 @@ def simple_cnn():
 
 if __name__ == '__main__':
     dictionary_path = '../data/vocabulary_all.dict'
-    _build_vocabulary(dictionary_path,ngram=None,filter=False)
+    # _build_vocabulary(dictionary_path,ngram=None,filter=False)
     dictionary = corpora.Dictionary().load(dictionary_path)
     dictionary.compactify()
 
