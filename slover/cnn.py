@@ -1,4 +1,10 @@
 from __future__ import print_function
+
+import random
+
+import jieba
+from keras.preprocessing import sequence
+
 '''
 python 3.5
 keras 2
@@ -17,14 +23,91 @@ from keras.callbacks import EarlyStopping
 from keras.callbacks import ModelCheckpoint
 from keras.layers import Input
 
-from slover.fasttext import train_gen, test_gen
-
 np.random.seed(8888)
-from keras.models import Sequential, load_model
+from keras.models import load_model
 from keras.layers import BatchNormalization
 from keras.layers import Dense, Dropout, Activation, Conv1D
 from keras.layers import Embedding
 from keras.layers import GlobalMaxPooling1D
+
+i = 0
+def token_extract(text,ngram=[]):
+    global i
+    words = []
+    word_list = list(jieba.cut(text, HMM=False))
+    for i,word in enumerate(word_list):
+        for n in ngram :
+            if i+n<len(word_list):
+                words.append(''.join(word_list[i:i+n]))
+        words.append(word)
+    i += 1
+    if i%batch_size ==0:print(words)
+    return words
+
+def train_gen( batch_size=32,maxlen=200,drop=0 ):
+    '''
+    训练集（及验证集）批生成器
+    :param batch_size: int,批次大小
+    :param maxlen: int,最大填充序列，如果大于maxlen截断，小于则向后填充0
+    :param drop: int,随机drop掉n个tokenid,如果是0则不删除
+    :return: x_batch,y_batch
+    '''
+    doc_path = '../cache/doc_list.pkl'
+    doc_list = pd.read_pickle(doc_path)
+    num_doc = len(doc_list)
+    ys = pd.read_pickle('../cache/penalty_list.pkl')
+    dictionary_path = '../data/vocabulary_all.dict'
+    dictionary = corpora.Dictionary.load(dictionary_path)
+    dictionary.compactify()
+
+    while True:
+        x_batch,y_batch = [],[]
+        while( len(x_batch)<batch_size ):
+            randi = random.randint(0,num_doc-1)
+            line = doc_list[randi]
+            y = int(ys[randi])-1
+            ids = [dictionary.token2id[token] for token in token_extract(line) if token in dictionary.token2id]
+
+            x_batch.append( ids )
+            y_batch.append( y )
+
+            if drop>0:
+                randi = random.randint(0, len(x_batch) - 1)
+                ids = x_batch[randi]
+                drop_list = []
+                for _ in range(drop):
+                    dropi = random.randint(0, len(ids) - 1)
+                    drop_list.append( dropi )
+                x_batch.append( [0 if id in drop_list else id for id in ids ] )
+                y_batch.append(y)
+
+        x_batch = sequence.pad_sequences(x_batch, maxlen=maxlen, padding='post',value=0)
+        yield x_batch,y_batch
+
+def test_gen( batch_size=32,maxlen=200):
+    '''
+    测试集批生成器
+    :param batch_size: int,批次大小
+    :param maxlen: int,最大填充序列，如果大于maxlen截断，小于则向后填充0
+    :return: x_batch
+    '''
+    doc_path = '../cache/doc_list_te.pkl'
+    doc_list = pd.read_pickle(doc_path)
+
+    dictionary_path = '../data/vocabulary_all.dict'
+    dictionary = corpora.Dictionary.load(dictionary_path)
+    dictionary.compactify()
+
+    x_batch = []
+    for i in range(30000):
+        line = doc_list[i]
+        ids = [dictionary.token2id[token] for token in token_extract(line) if token in dictionary.token2id]
+        x_batch.append( ids )
+
+        if (i+1)%batch_size==0 or i==30000-1:
+            X_batch = sequence.pad_sequences(x_batch, maxlen=maxlen, padding='post',value=0)
+            x_batch = []
+            yield X_batch
 
 
 def cnn_model():
@@ -108,50 +191,6 @@ def sub_cnn(model_path ='../model/cnn.h5', res_name='../res/cnn.txt'):
             data = json.dumps({'id': str(id), 'penalty': int(penalty), "laws": [1, 2, 3, 4]})
             f.write(data+'\n')
         f.flush()
-
-def simple_cnn():
-    # 构建模型
-    print('Build model...')
-    model = Sequential()
-
-    # we start off with an efficient embedding layer which maps
-    # our vocab indices into embedding_dims dimensions
-    # 先从一个高效的嵌入层开始，它将词汇的索引值映射为 embedding_dims 维度的词向量
-    model.add(Embedding(max_features,
-                        embedding_dims,
-                        input_length=maxlen))
-    # we add a Convolution1D, which will learn nb_filter
-    # word group filters of size filter_length:
-    # 添加一个 1D 卷积层，它将学习 nb_filter 个 filter_length 大小的词组卷积核
-    model.add(Conv1D(nb_filter=nb_filter,
-                     filter_length=filter_length,
-                     border_mode='valid',
-                     activation='relu',
-                     init='glorot_uniform',
-                     subsample_length=1))
-    model.add(BatchNormalization())
-    model.add(Dropout(0.2))  # Dropout层
-    # we use max pooling:
-    # 使用最大池化
-    model.add(GlobalMaxPooling1D())
-
-    # We add a vanilla hidden layer:
-    # 添加一个原始隐藏层
-    model.add(Dense(hidden_dims))
-    model.add(Dropout(0.2))
-    model.add(Activation('relu'))  ###
-
-    # We project onto a single unit output layer, and squash it with a sigmoid:
-    # 投影到一个单神经元的输出层，并且使用 sigmoid 压缩它
-    model.add(Dense(8))
-    model.add(Activation('softmax'))
-
-    model.summary()  # 模型概述
-
-    # 定义损失函数，优化器，评估矩阵
-    model.compile(loss='sparse_categorical_crossentropy',
-                  optimizer=optimizers.Adam(lr=0.0005),
-                  metrics=['accuracy'])
 
 if __name__ == '__main__':
     dictionary_path = '../data/vocabulary_all.dict'
