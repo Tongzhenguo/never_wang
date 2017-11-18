@@ -2,7 +2,9 @@ from __future__ import print_function
 
 import random
 
+import gc
 import jieba
+import re
 from keras.preprocessing import sequence
 
 '''
@@ -12,7 +14,7 @@ keras 2
 import codecs
 import json
 from collections import defaultdict
-
+import os
 import keras
 import numpy as np
 import pandas as pd
@@ -34,6 +36,17 @@ i = 0
 def token_extract(text,ngram=[]):
     global i
     words = []
+    ## manual control
+    #1.match person name or person mention
+    # 1.match person name or person mention
+    re_person = re.compile(u'被告人([^，。、]+)')  # eg.被告人杨某某
+    re_person2 = re.compile(u'([\u4E00-\u9FD5]某{1,2})')  # eg.杨某某
+    for name in re_person.findall(text):
+        jieba.add_word(name)
+        jieba.suggest_freq(name)
+    for name in re_person2.findall(text):
+        jieba.add_word(name)
+        jieba.suggest_freq(name)
     word_list = list(jieba.cut(text, HMM=False))
     for i,word in enumerate(word_list):
         for n in ngram :
@@ -41,8 +54,55 @@ def token_extract(text,ngram=[]):
                 words.append(''.join(word_list[i:i+n]))
         words.append(word)
     i += 1
-    if i%batch_size ==0:print(words[:10])
+    if i%batch_size ==0:print(words[:30])
     return words
+
+def _build_vocabulary(dictionary_path ='../data/vocabulary.dict',ngram=[2,3]):
+    '''
+    词表是一个很重要的影响因素，不过滤构造的词矩阵会OOM
+    '''
+    ## add law vocabulary
+    id2laws = pd.read_pickle('../cache/law_vocab.pkl')
+    for id,laws in id2laws.items():
+        for law in laws:
+            jieba.add_word( law )
+            jieba.suggest_freq( law )
+    with codecs.open('../data/form-laws.txt', encoding='utf-8') as f:
+        ls = f.readlines()
+        for i, line in enumerate(ls):
+            for law in re.findall('【(.*?)】',line):
+                for word in law.split(';'):
+                    jieba.add_word(word)
+                    jieba.suggest_freq(word)
+
+    if os.path.exists(dictionary_path):
+        dictionary = corpora.Dictionary().load(dictionary_path)
+    else:
+        doc_list = pd.read_pickle('../cache/doc_list.pkl')
+        doc_list_te = pd.read_pickle('../cache/doc_list_te.pkl')
+        doc_list.extend(doc_list_te)
+
+        with codecs.open('../data/form-laws.txt', encoding='utf-8') as f:
+            ls = f.readlines()
+        doc_list.extend(ls)
+
+        cor = [token_extract(line,ngram=[]) for line in doc_list]
+        dictionary = corpora.Dictionary(cor)
+
+        if ngram:
+            cor = [token_extract(line,ngram=[2,3]) for line in doc_list]
+            dictionary2 = corpora.Dictionary(cor)
+            once_ids = [tokenid for tokenid, docfreq in dictionary2.dfs.items() if docfreq < 100]
+            dictionary2.filter_tokens( once_ids )
+            dictionary2.compactify()
+
+            print('len dictionary = %s' % len(dictionary))  # len dictionary = 125156
+            dict2_to_dict1 = dictionary.merge_with(dictionary2)
+        print('len dictionary = %s' % len(dictionary)) #len dictionary = 125156
+        dictionary.save(dictionary_path)
+        del doc_list,doc_list_te
+        gc.collect()
+    return dictionary
 
 def train_gen( batch_size=32,maxlen=200,drop=0 ):
     '''
@@ -194,7 +254,7 @@ def sub_cnn(model_path ='../model/cnn.h5', res_name='../res/cnn.txt'):
 
 if __name__ == '__main__':
     dictionary_path = '../data/vocabulary_all.dict'
-    # _build_vocabulary(dictionary_path,ngram=None,filter=False)
+    _build_vocabulary(dictionary_path,ngram=None,filter=False)
     dictionary = corpora.Dictionary().load(dictionary_path)
     dictionary.compactify()
 
