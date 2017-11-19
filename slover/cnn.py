@@ -255,7 +255,7 @@ if __name__ == '__main__':
     maxlen = 10000  # 序列最大长度
     batch_size = 32  # 批数据量大小
     embedding_dims = 300  # 词向量维度
-    nb_epoch = 20  # 迭代轮次
+    nb_epoch = 12  # 迭代轮次
     nb_filter = 200  # 1维卷积核个数
     hidden_dims = 128  # 隐藏层维度
     ys = pd.read_pickle('../cache/penalty_list.pkl')
