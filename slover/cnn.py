@@ -54,7 +54,7 @@ def token_extract(text,ngram=[]):
                 words.append(''.join(word_list[i:i+n]))
         words.append(word)
     i += 1
-    if i%batch_size ==0:print(words[:30])
+    if i%1000 ==0:print(words[:30])
     return words
 
 def _build_vocabulary(dictionary_path ='../data/vocabulary.dict',ngram=[2,3]):
@@ -126,7 +126,7 @@ def train_gen( batch_size=32,maxlen=200,drop=0 ):
             randi = random.randint(0,num_doc-1)
             line = doc_list[randi]
             y = int(ys[randi])-1
-            ids = [dictionary.token2id[token] for token in token_extract(line) if token in dictionary.token2id]
+            ids = [dictionary.token2id[token] for token in token_extract(line,ngram=[2,3]) if token in dictionary.token2id]
 
             x_batch.append( ids )
             y_batch.append( y )
@@ -161,7 +161,7 @@ def test_gen( batch_size=32,maxlen=200):
     x_batch = []
     for i in range(30000):
         line = doc_list[i]
-        ids = [dictionary.token2id[token] for token in token_extract(line) if token in dictionary.token2id]
+        ids = [dictionary.token2id[token] for token in token_extract(line,ngram=[2,3]) if token in dictionary.token2id]
         x_batch.append( ids )
 
         if (i+1)%batch_size==0 or i==30000-1:
@@ -177,6 +177,8 @@ def cnn_model():
     train_x = Input(shape=(maxlen,), dtype='int32')
     ## define embedding layer
     embed_x = Embedding(input_dim=max_features,output_dim=embedding_dims, input_length=maxlen)(train_x)
+    ## Data Augmentation
+    embed_x = Dropout(0.05)(embed_x)
     ## define convolution layer,
     convolutions = []
     i = 0
@@ -191,7 +193,6 @@ def cnn_model():
         # add bn
         feature_vector = BatchNormalization()(feature_vector) ## scale to unit vector
         feature_vector = Activation('relu')(feature_vector)
-        # feature_vector = Dropout(0.2)(feature_vector)
         if n_gram != 1:
             i += 1
             feature_vector = Conv1D(
@@ -200,16 +201,9 @@ def cnn_model():
                 kernel_size=n_gram,
                 activation='relu'
             )(feature_vector)
-        # i += 1
-        # feature_vector = Conv1D(x
-        #     name="conv_" + str(n_gram) + '_' + str(i),
-        #     filters=nb_filter,
-        #     kernel_size=n_gram,
-        #     activation=None
-        # )(feature_vector)
-        # # add bn
-        # feature_vector = BatchNormalization()(feature_vector)  ## scale to unit vector
-        # feature_vector = Activation('relu')(feature_vector)
+            # add bn
+            feature_vector = BatchNormalization()(feature_vector)  ## scale to unit vector
+            feature_vector = Activation('relu')(feature_vector)
         # pooling layer
         one_max = GlobalMaxPooling1D(name='one_max_pooling_%s' %n_gram)(feature_vector)
         convolutions.append(one_max)
@@ -218,20 +212,18 @@ def cnn_model():
     # add first hidden layer
     sentence_vector = BatchNormalization()(sentence_vector)  ## scale to unit vector and
     sentence_vector = Dense(hidden_dims, activation='relu')(sentence_vector)
-
-    # sentence_vector = Dropout(0.3)(sentence_vector)
+    sentence_vector = Dropout(0.35)(sentence_vector)
     # add second hidden layer
     sentence_vector = BatchNormalization()(sentence_vector)  ## scale to unit vector
     sentence_vector = Dense(32, activation='relu')(sentence_vector)
+    sentence_vector = Dropout(0.35)(sentence_vector)
 
-    # sentence_vector = Dropout(0.3)(sentence_vector)
     ## define output vector
     pred = Dense(8, activation='softmax')(sentence_vector)
 
     model = Model(input=train_x, output=pred)
     model.summary()
-
-    model.compile(optimizer=optimizers.Adam(lr=0.0001), loss='sparse_categorical_crossentropy', metrics=['accuracy'])
+    model.compile(optimizer=optimizers.Adam(lr=0.01,beta_1=0.95), loss='sparse_categorical_crossentropy', metrics=['accuracy'])
 
     return model
 
@@ -254,7 +246,7 @@ def sub_cnn(model_path ='../model/cnn.h5', res_name='../res/cnn.txt'):
 
 if __name__ == '__main__':
     dictionary_path = '../data/vocabulary_all.dict'
-    _build_vocabulary(dictionary_path,ngram=None,filter=False)
+    _build_vocabulary(dictionary_path,ngram=None)
     dictionary = corpora.Dictionary().load(dictionary_path)
     dictionary.compactify()
 
@@ -286,6 +278,6 @@ if __name__ == '__main__':
                         ,validation_steps=1
                         )
 
-    model.save('../model/cnn.h5')
+    model.save('../model/cnn_dp.h5')
 
-    sub_cnn(model_path='../model/cnn.h5', res_name='../res/cnn.txt')
+    sub_cnn(model_path='../model/cnn_dp.h5', res_name='../res/cnn.txt')
