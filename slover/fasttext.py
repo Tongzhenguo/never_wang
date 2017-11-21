@@ -8,8 +8,7 @@ from collections import defaultdict
 import numpy as np
 from gensim import corpora
 from keras import optimizers
-from keras.callbacks import EarlyStopping
-from keras.callbacks import ModelCheckpoint
+from keras.callbacks import ModelCheckpoint, EarlyStopping
 
 from data_processing.dataprocessing import token_extract, batch_size, _build_vocabulary
 
@@ -87,6 +86,33 @@ def test_gen( batch_size=32,maxlen=200):
             x_batch = []
             yield X_batch
 
+def make_nn_model():
+    ## keras functional_API
+    # 构建模型
+    print('Build model...')
+    model = Sequential()
+
+    # we start off with an efficient embedding layer which maps
+    # our vocab indices into embedding_dims dimensions
+    # 先从一个高效的嵌入层开始，它将词汇表索引映射到 embedding_dim 维度的向量上
+    model.add(Embedding(max_features,
+                        embedding_dims,
+                        input_length=maxlen))
+
+    # we add a GlobalAveragePooling1D, which will average the embeddings
+    # of all words in the document
+    # 添加一个 GlobalAveragePooling1D 层，它将平均整个序列的词嵌入
+    model.add(GlobalAveragePooling1D())
+
+    model.add(Dense(8, activation='softmax'))
+
+    model.summary()  # 概述
+
+    model.compile(optimizer=optimizers.Adam(lr=0.0005)
+                  , loss='sparse_categorical_crossentropy'
+                  , metrics=['accuracy']
+                  )
+
 def sub_fasttext(model_path = '../model/fasttext.h5',res_name='../res/fasttext.txt'):
 
     clf = load_model(model_path)
@@ -95,7 +121,7 @@ def sub_fasttext(model_path = '../model/fasttext.h5',res_name='../res/fasttext.t
     for x_batch in test_gen(maxlen=maxlen):
         y_batch = clf.predict_classes(x_batch,batch_size=batch_size)
         for y in y_batch:
-            y_pred.append( y )
+            y_pred.append( y+1 ) #remapping to 1 to 8
     with codecs.open(res_name,encoding='utf-8',mode='w') as f:
         for i in range(len(id_list_te)):
             id = id_list_te[i]
@@ -139,7 +165,7 @@ if __name__ == "__main__":
     # 添加一个 GlobalAveragePooling1D 层，它将平均整个序列的词嵌入
     model.add(GlobalAveragePooling1D())
 
-    model.add(Dense(16, activation='softmax'))
+    model.add(Dense(8, activation='softmax'))
 
     model.summary()  # 概述
 
@@ -148,19 +174,19 @@ if __name__ == "__main__":
                   ,metrics=['accuracy']
                   )
 
-    # early_stopping = EarlyStopping(monitor='val_loss', patience=100, min_delta=0.0005, mode='min')  # loss最少下降0.0005才算一次提升
-    # model_checkpoint = ModelCheckpoint('../model/fasttext_all_vocab_ngram_drop.h5', save_best_only=False, save_weights_only=True, mode='min')
+    early_stopping = EarlyStopping(monitor='val_loss', patience=100, min_delta=0.0005, mode='min')  # loss最少下降0.0005才算一次提升
+    model_checkpoint = ModelCheckpoint('../model/fasttext.h5', save_best_only=True, save_weights_only=True, mode='min')
     # 训练与验证
-    model.fit_generator(train_gen(batch_size,maxlen=maxlen,drop=20)
+    model.fit_generator(train_gen(batch_size,maxlen=maxlen,drop=2)
                         ,samples_per_epoch=40000
                         ,nb_val_samples = batch_size
                         ,class_weight=class_weight
                         ,nb_epoch=nb_epoch
-                        ,validation_data=train_gen(batch_size,maxlen=maxlen,drop=20)
+                        ,validation_data=train_gen(batch_size,maxlen=maxlen,drop=2)
                         ,nb_worker=8
-                        # ,callbacks=[early_stopping,model_checkpoint]
+                        ,callbacks=[early_stopping,model_checkpoint]
                         )
 
-    model.save('../model/fasttext_all_vocab_ngram_drop.h5')
+    model.save('../model/fasttext.h5')
 
-    sub_fasttext(model_path='../model/fasttext_all_vocab_ngram_drop.h5')
+    sub_fasttext(model_path='../model/fasttext.h5')

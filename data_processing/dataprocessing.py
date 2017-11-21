@@ -66,22 +66,34 @@ def bulid_law_vacab():
 # bulid_law_vacab()
 
 i = 0
+i = 0
 def token_extract(text,ngram=[]):
     global i
     words = []
+    ## manual control
+    #1.match person name or person mention
+    # 1.match person name or person mention
+    re_person = re.compile(u'被告人[\u4E00-\u9FD5]{2,3}|曾用名[\u4E00-\u9FD5]{2,3}|辩护人[\u4E00-\u9FD5]{2,3}')  # eg.被告人杨某某
+    re_person2 = re.compile(u'([\u4E00-\u9FD5]某{1,2})')  # eg.杨某某
+    re_area = re.compile(u'.*?机关+|.*?[省市县区乡镇街]+|.*?公安局|.*?检察院|.*?看守所|.*?法院')
+    for name in re_person.findall(text):
+        jieba.add_word(name)
+        jieba.suggest_freq(name)
+    for name in re_person2.findall(text):
+        jieba.add_word(name)
+        jieba.suggest_freq(name)
+    for name in re_area.findall(text):
+        jieba.add_word(name)
+        jieba.suggest_freq(name)
     word_list = list(jieba.cut(text, HMM=False))
-    re_area = re.compile(u'.*?[省市县区乡镇街]+|.*?公安局|.*?检察院|.*?看守所|.*?法院')
     for i,word in enumerate(word_list):
-        # if word not in stop_words: #and not word.isdigit() :and not re_area.match(word) and len(word)>1
-            # if pos not in ['nr',"nr1","nr2","nrj","nrf","ns",'m']:
         for n in ngram :
             if i+n<len(word_list):
                 words.append(''.join(word_list[i:i+n]))
         words.append(word)
     i += 1
-    if i%batch_size ==0:print(words)
+    if i%50 ==0:print(words[:200])
     return words
-
 
 def get_train_cache():
     id_list = []
@@ -373,8 +385,10 @@ def extract_area_age( doc_list_path='../cache/doc_list.pkl',num_example=10,path=
         print( area,age_set )
 
 if __name__ == '__main__':
+    # get_train_cache()
+    # get_test_cache()
     dictionary_path = '../data/vocabulary_all_.dict'
-    _build_vocabulary(dictionary_path)
+    _build_vocabulary(dictionary_path,ngram=None)
 
     # cnt_law_penalty()
 
