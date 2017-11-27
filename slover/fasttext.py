@@ -1,23 +1,23 @@
+'''
+    使用fasttext同时训练罚金等级与涉及法律条款，并对每一个样本进行赋予如下权重：
+        weight = 0.5*pe_label_weight+0.5*dot(law_array,weight_array),其中weight(label==k) = 1/COUNT(label==k)
+'''
 from __future__ import print_function
-
 import codecs
 import json
 import random
 from collections import defaultdict
-
 import numpy as np
+from data_processing.dataprocessing import token_extract, batch_size, _build_vocabulary
 from gensim import corpora
 from keras import Input
 from keras import Model
 from keras import optimizers
 from keras.callbacks import ModelCheckpoint, EarlyStopping
-
-from data_processing.dataprocessing import token_extract, batch_size, _build_vocabulary
-
 np.random.seed(1337)  # for reproducibility
 import pandas as pd
 from keras.preprocessing import sequence
-from keras.models import Sequential, load_model
+from keras.models import load_model
 from keras.layers import Dense
 from keras.layers import Embedding
 from keras.layers import GlobalAveragePooling1D
@@ -29,7 +29,7 @@ def train_gen( batch_size=32,maxlen=200,drop=0 ):
     :param batch_size: int,批次大小
     :param maxlen: int,最大填充序列，如果大于maxlen截断，小于则向后填充0
     :param drop: int,随机drop掉n个tokenid,如果是0则不删除
-    :return: x_batch,y_batch
+    :return: x_batch,y_batch,sample_weights
     '''
     doc_path = '../cache/doc_list.pkl'
     doc_list = pd.read_pickle(doc_path)
